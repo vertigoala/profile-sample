@@ -1,0 +1,86 @@
+version: '3.7'
+
+services:
+
+  profile-service:
+    image: vertigoala/profile-service
+    configs:
+      - source: profile-config
+        target: /data/profile-service/config/profile-service-config.properties
+    deploy:
+      placement:
+        constraints:
+          - node.role == worker
+          - node.labels.alanode == worker0
+      labels:
+        traefik.frontend.rule: "PathPrefix:/profile-service"
+        traefik.backend: "profile-service"
+        traefik.port: "8080"
+        traefik.enable: "true"
+    networks:
+      - traefik-net
+      - backend
+
+  mongoprofiles:
+    image: mongo:3.4.6
+    networks:
+      - backend
+    command: --smallfiles
+    volumes:
+      - mongoprofiles:/data/db
+    deploy:
+      placement:
+        constraints:
+          - node.role == worker
+          - node.labels.alanode == worker1
+
+  esprofiles:
+    image: elasticsearch:1.7.4
+    networks:
+      - backend
+    environment:
+      - cluster.name=esprofiles
+    configs:
+      - source: esprofiles-config
+        target: /usr/share/elasticsearch/config/elasticsearch.yml
+    volumes:
+      - esprofiles:/usr/share/elasticsearch/data
+    deploy:
+      placement:
+        constraints:
+          - node.role == worker
+          - node.labels.alanode == worker2
+
+  profile-hub:
+    image: vertigoala/profile-hub
+    networks:
+      - traefik-net
+    deploy:
+      placement:
+        constraints:
+          - node.role == worker
+      labels:
+        traefik.frontend.rule: "PathPrefix:/profile-hub"
+        traefik.backend: "profile-hub"
+        traefik.port: "8080"
+        traefik.enable: "true"
+    configs:
+      - source: profile-hub-config
+        target: /data/profile-hub/config/profile-hub-config.properties
+
+volumes:
+  mongoprofiles:
+  esprofiles:
+configs:
+  esprofiles-config:
+    file: ./config/elasticsearch.yml
+  profile-hub-config:
+    file: ./config/profile-hub-config.properties
+  profile-config:
+    file: ./config/profile-service-config.properties
+networks:
+  traefik-net:
+    external: true
+    name: traefik_traefik-net
+  backend:
+    driver: overlay
